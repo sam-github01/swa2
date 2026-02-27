@@ -1,4 +1,4 @@
-##丞燕產品訂購助手05 app.py
+##丞燕產品訂購系統 (藍色美化版)06  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -22,7 +22,7 @@ def load_data():
 
 df = load_data()
 
-# --- 側邊欄：搜尋篩選 (保留在側邊欄，節省空間) ---
+# --- 側邊欄：搜尋篩選 ---
 st.sidebar.header("🔍 快速過濾產品")
 search_term = st.sidebar.text_input("搜尋品名或貨號", "")
 all_categories = ["全部"] + sorted(df["類別"].unique().tolist())
@@ -41,7 +41,7 @@ if selected_category != "全部":
 # --- 主介面佈局：左側訂單資訊 | 右側產品選擇 ---
 col_order, col_products = st.columns([1.2, 1.8])
 
-# --- 左側：訂購單與購物車管理 (現在移到這裡) ---
+# --- 左側：訂購單與購物車管理 ---
 with col_order:
     st.subheader("📋 1. 填寫訂單資訊")
     
@@ -85,8 +85,13 @@ with col_order:
                         st.rerun()
         
         st.divider()
-        st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,}")
-        st.metric("總計積分 (SV)", f"{total_sv:,} SV")
+        
+        # --- 這裡顯示總計 (已使用 CSS 變更為藍色) ---
+        m_col1, m_col2 = st.columns(2)
+        with m_col1:
+            st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,}")
+        with m_col2:
+            st.metric("總計積分 (SV)", f"{total_sv:,} SV")
         
         # --- 複製按鈕 ---
         copy_text = f"📦 【丞燕產品訂購單】\n"
@@ -114,7 +119,7 @@ with col_order:
 # --- 右側：產品瀏覽與選擇 ---
 with col_products:
     st.title("🌿 產品選購區")
-    st.caption(f"目前顯示 {len(filtered_df)} 項產品，請先調整數量再加入購物車。")
+    st.caption(f"目前顯示 {len(filtered_df)} 項產品。")
     
     # 產品展示
     for _, row in filtered_df.iterrows():
@@ -124,7 +129,6 @@ with col_products:
                 st.write(f"🔢 貨號: `{row['貨號']}`")
                 st.write(f"⭐ 積分: {row['積分額 SV']} SV")
             with c2:
-                # 數量選擇器 (預設值為 1)
                 qty = st.number_input("購買數量", min_value=1, value=1, key=f"qty_{row['貨號']}")
                 if st.button("➕ 加入", key=f"btn_{row['貨號']}", use_container_width=True):
                     item_id = row['貨號']
@@ -135,14 +139,22 @@ with col_products:
 # --- CSS 視覺調整 ---
 st.markdown("""
 <style>
-    /* 讓左側訂單區塊在捲動時能更明顯 */
-    [data-testid="stVerticalBlock"] > div:nth-child(1) {
-        background-color: transparent;
+    /* 設定 Metric 數值文字顏色為藍色 */
+    div[data-testid="stMetricValue"] {
+        color: #1e88e5 !important;
     }
-    .stMetric {
-        background-color: #f8f9fa;
-        padding: 10px;
+    
+    /* 設定 Metric 的外框樣式，增加藍色左邊框強調 */
+    [data-testid="stMetric"] {
+        background-color: #f0f7ff;
+        padding: 15px;
         border-radius: 10px;
+        border-left: 5px solid #1e88e5;
+    }
+    
+    /* 調整標題顏色與按鈕圓角 */
+    .stButton>button {
+        border-radius: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
