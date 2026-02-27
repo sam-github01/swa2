@@ -16,7 +16,7 @@ if 'order_count' not in st.session_state:
 # 3. 讀取資料
 @st.cache_data
 def load_data():
-    # 讀取 CSV，確保貨號維持字串格式
+    # 讀取 CSV，確保貨號維持字串格式 (避免 010004 變成 10004)
     df = pd.read_csv('丞燕產品價格.csv', dtype={'貨號': str})
     return df
 
@@ -86,7 +86,7 @@ with col_order:
         
         st.divider()
         
-        # --- 這裡顯示總計 (已使用 CSS 變更為藍色) ---
+        # --- 總結欄位 (已套用淡黃色背景與藍色數值) ---
         m_col1, m_col2 = st.columns(2)
         with m_col1:
             st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,}")
@@ -139,22 +139,23 @@ with col_products:
 # --- CSS 視覺調整 ---
 st.markdown("""
 <style>
-    /* 設定 Metric 數值文字顏色為藍色 */
+    /* 設定數值文字顏色為藍色 */
     div[data-testid="stMetricValue"] {
         color: #1e88e5 !important;
     }
     
-    /* 設定 Metric 的外框樣式，增加藍色左邊框強調 */
+    /* 設定標籤文字顏色 (可選，讓標題也清晰) */
+    div[data-testid="stMetricLabel"] {
+        color: #333333 !important;
+    }
+
+    /* 設定 Metric 區塊背景為淡黃色 */
     [data-testid="stMetric"] {
-        background-color: #f0f7ff;
+        background-color: #ffffcc; /* 淡黃色背景 */
         padding: 15px;
         border-radius: 10px;
-        border-left: 5px solid #1e88e5;
-    }
-    
-    /* 調整標題顏色與按鈕圓角 */
-    .stButton>button {
-        border-radius: 5px;
+        border-left: 5px solid #1e88e5; /* 藍色邊線保留以增加對比 */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 </style>
 """, unsafe_allow_html=True)
