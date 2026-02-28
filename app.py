@@ -91,7 +91,7 @@ with col_order:
         with m_col1:
             st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,}")
         with m_col2:
-            st.metric("總計積分 (SV)", f"{total_sv:,} SV")
+            st.metric("總計積分 (SV)", f"SV {total_sv:,}")
         
         # --- 複製按鈕 ---
         copy_text = f"📦 【丞燕產品訂購單】\n"
@@ -101,10 +101,10 @@ with col_order:
         copy_text += "="*22 + "\n"
         for item in cart_summary:
             copy_text += f"• {item['品名']} x {item['數量']}\n"
-            copy_text += f"  (NT$ {item['DPT']:,} / {item['SV']:,} SV)\n"
+            copy_text += f"  (NT$ {item['DPT']:,} / SV {item['SV']:,})\n"
         copy_text += "="*22 + "\n"
         copy_text += f"💰 總計金額：NT$ {total_dpt:,}\n"
-        copy_text += f"⭐ 總計積分：{total_sv:,} SV"
+        copy_text += f"⭐ 總計積分：SV {total_sv:,}"
 
         st_copy_to_clipboard(
             copy_text, 
