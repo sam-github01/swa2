@@ -78,7 +78,7 @@ with col_order:
                 cc1, cc2 = st.columns([5, 1])
                 with cc1:
                     st.markdown(f"**{product['品名']}**")
-                    st.caption(f"數量: {qty} | 金額: NT$ {sub_dpt:,} | 積分: {sub_sv:,} SV")
+                    st.caption(f"數量: {qty} | 金額: NT$ {sub_dpt:,} | 積分: SV {sub_sv:,}")
                 with cc2:
                     if st.button("🗑️", key=f"del_{item_id}"):
                         del st.session_state.cart[item_id]
@@ -127,7 +127,7 @@ with col_products:
             c1, c2 = st.columns([1.5, 1])
             with c1:
                 st.write(f"🔢 貨號: `{row['貨號']}`")
-                st.write(f"⭐ 積分: {row['積分額 SV']} SV")
+                st.write(f"⭐ 積分: SV {row['積分額 SV']} ")
             with c2:
                 qty = st.number_input("購買數量", min_value=1, value=1, key=f"qty_{row['貨號']}")
                 if st.button("➕ 加入", key=f"btn_{row['貨號']}", use_container_width=True):
