@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (藍色美化版)07  app.py
+##丞燕產品訂購系統 (單選優惠版)  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -45,7 +45,7 @@ with col_order:
     st.subheader("📋 1. 填寫訂單資訊")
     
     with st.container(border=True):
-        customer_name = st.text_input("👤 訂購人姓名", placeholder="請在此輸入姓名...")
+        customer_name = st.text_input("👤 訂購人姓名", placeholder="請輸入姓名...")
         tw_time = datetime.now() + timedelta(hours=8)
         today_str = tw_time.strftime("%Y%m%d")
         order_id = f"{today_str}-{st.session_state.order_count:03d}"
@@ -57,7 +57,7 @@ with col_order:
 
     st.subheader("🛒 2. 確認訂購內容")
     if not st.session_state.cart:
-        st.info("尚未選購任何產品，請從右側加入。")
+        st.info("尚未選購任何產品。")
     else:
         cart_summary = []
         total_sv, total_dpt = 0, 0
@@ -84,36 +84,35 @@ with col_order:
         st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,}")
         st.metric("總計積分 (SV)", f"SV {total_sv:,}")
 
-        # --- 新增：優惠計算功能 (Checkbox) ---
+        # --- 防呆機制：使用 Radio Button 確保只能三選一 ---
         st.write("🎁 **優惠計算選項**")
-        
-        # 選項一：(SV - 4500) * 10%
-        discount_1 = st.checkbox("方案 A: (SV - 4500) x 10% 優惠")
-        # 選項二：SV * 10%
-        discount_2 = st.checkbox("方案 B: SV x 10% 優惠")
+        promo_choice = st.radio(
+            "請選擇優惠方案：",
+            ["不使用優惠", "方案 A: (SV - 4500) x 10%", "方案 B: SV x 10%"],
+            index=0
+        )
 
         promo_info = ""
         final_price = total_dpt
 
-        if discount_1:
-            calc_sv = (total_sv - 4500) * 0.1
-            calc_sv = max(0, calc_sv) # 避免負數
+        if promo_choice == "方案 A: (SV - 4500) x 10%":
+            calc_sv = max(0, (total_sv - 4500) * 0.1)
             final_price = total_dpt - calc_sv
-            promo_info += f"\n💡 【優惠 A】\n"
-            promo_info += f"分數計算: ({total_sv:,} SV - 4500) x 10% = {calc_sv:,.0f} 分\n"
+            promo_info += f"\n💡 【優惠方案 A】\n"
+            promo_info += f"分數計算: (SV {total_sv:,} - 4500) x 10% = {calc_sv:,.0f} 分\n"
             promo_info += f"優惠價格: NT$ {total_dpt:,} - {calc_sv:,.0f} = NT$ {final_price:,.0f}\n"
 
-        if discount_2:
+        elif promo_choice == "方案 B: SV x 10%":
             calc_sv_2 = total_sv * 0.1
             final_price = total_dpt - calc_sv_2
-            promo_info += f"\n💡 【優惠 B】\n"
-            promo_info += f"分數計算: {total_sv:,} SV x 10% = {calc_sv_2:,.0f} 分\n"
+            promo_info += f"\n💡 【優惠方案 B】\n"
+            promo_info += f"分數計算: SV {total_sv:,} x 10% = {calc_sv_2:,.0f} 分\n"
             promo_info += f"優惠價格: NT$ {total_dpt:,} - {calc_sv_2:,.0f} = NT$ {final_price:,.0f}\n"
 
         if promo_info:
-            st.info(promo_info) # 在網頁上顯示計算結果
+            st.success(promo_info)
 
-        # --- 複製按鈕 (包含優惠內容) ---
+        # --- 複製按鈕 ---
         copy_text = f"📦 【丞燕產品訂購單】\n"
         copy_text += f"👤 訂購人：{customer_name if customer_name else '未填寫'}\n"
         copy_text += f"🆔 序號：{order_id}\n"
@@ -127,7 +126,7 @@ with col_order:
         copy_text += f"⭐ 總計積分：SV {total_sv:,}\n"
         
         if promo_info:
-            copy_text += promo_info + "\n"
+            copy_text += promo_info
             copy_text += f"🔥 最終應付金額：NT$ {final_price:,.0f}\n"
 
         st_copy_to_clipboard(
@@ -143,8 +142,6 @@ with col_order:
 # --- 右側：產品選購區 ---
 with col_products:
     st.title("🌿 產品選購區")
-    st.caption(f"目前顯示 {len(filtered_df)} 項產品。")
-    
     for _, row in filtered_df.iterrows():
         with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
             c1, c2 = st.columns([1.5, 1])
@@ -156,5 +153,7 @@ with col_products:
                 if st.button("➕ 加入", key=f"btn_{row['貨號']}", use_container_width=True):
                     item_id = row['貨號']
                     st.session_state.cart[item_id] = st.session_state.cart.get(item_id, 0) + qty
-                    st.toast(f"✅ 已將 {qty} 件 {row['品名']} 加入訂單")
+                    st.toast(f"✅ 已加入 {qty} 件 {row['品名']}")
                     st.rerun()
+
+st.markdown("<style>.stButton>button {border-radius: 5px;}</style>", unsafe_allow_html=True)
