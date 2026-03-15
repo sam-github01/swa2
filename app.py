@@ -1,11 +1,11 @@
-##丞燕產品訂購系統 (單選優惠版)09  app.py
+##丞燕產品訂購系統 (雙分頁優化版)10  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from st_copy_to_clipboard import st_copy_to_clipboard
 
 # 1. 頁面配置
-st.set_page_config(page_title="丞燕產品訂購助手", layout="wide")
+st.set_page_config(page_title="丞燕產品訂購系統", layout="wide")
 
 # 2. 初始化 Session State
 if 'cart' not in st.session_state:
@@ -16,6 +16,7 @@ if 'order_count' not in st.session_state:
 # 3. 讀取資料
 @st.cache_data
 def load_data():
+    # 讀取 CSV，確保貨號維持字串格式
     df = pd.read_csv('丞燕產品價格.csv', dtype={'貨號': str})
     return df
 
@@ -36,30 +37,35 @@ if search_term:
 if selected_category != "全部":
     filtered_df = filtered_df[filtered_df["類別"] == selected_category]
 
-# --- 分頁設定 ---
-tab1, tab2 = st.tabs(["🛍️ 產品選購區", "🛒 我的購物車"])
+# --- 主標題 ---
+st.title("🌿 丞燕產品訂購系統")
 
-# --- Tab 1: 產品選購區 ---
+# --- 右側框架：使用 Tabs 分頁 ---
+tab1, tab2 = st.tabs(["📝 訂單資訊與產品選購", "🛒 購物車明細"])
+
+# --- Tab 1: 訂單資訊與產品選購 ---
 with tab1:
-    st.title("🌿 丞燕產品選購")
-    
-    # 訂購人與序號基礎資訊（放在選購區上方方便填寫）
+    # A. 訂單資訊區
+    st.subheader("第一步：填寫基本資料")
     with st.container(border=True):
-        c1, c2 = st.columns(2)
-        with c1:
+        col_name, col_id = st.columns([1, 1])
+        with col_name:
             customer_name = st.text_input("👤 訂購人姓名", placeholder="請輸入姓名...")
-        with c2:
+        with col_id:
             tw_time = datetime.now() + timedelta(hours=8)
             today_str = tw_time.strftime("%Y%m%d")
             order_id = f"{today_str}-{st.session_state.order_count:03d}"
-            st.write(f"🆔 當前訂單序號: `{order_id}`")
+            st.write(f"🆔 當前訂單序號：`{order_id}`")
             if st.button("🔄 更換下一組序號"):
                 st.session_state.order_count += 1
                 st.rerun()
 
     st.divider()
+
+    # B. 產品選購區
+    st.subheader("第二步：選購產品")
+    st.caption(f"目前顯示 {len(filtered_df)} 項產品")
     
-    # 產品展示
     for _, row in filtered_df.iterrows():
         with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
             col_info, col_action = st.columns([1.5, 1])
@@ -71,20 +77,20 @@ with tab1:
                 if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", use_container_width=True):
                     item_id = row['貨號']
                     st.session_state.cart[item_id] = st.session_state.cart.get(item_id, 0) + qty
-                    # 加入成功提醒訊息
-                    st.success(f"✅ 【{row['品名']}】已放入購物車！ (目前共 {st.session_state.cart[item_id]} 件)")
+                    # 提醒訊息
+                    st.success(f"✅ 已放入：{row['品名']} x {qty}")
 
-# --- Tab 2: 我的購物車 ---
+# --- Tab 2: 單獨放置購物車內容 ---
 with tab2:
-    st.header("📝 訂購內容確認")
+    st.header("🛒 確認訂購內容")
     
     if not st.session_state.cart:
-        st.info("目前購物車內沒有產品，請先前往【產品選購區】挑選。")
+        st.info("目前購物車是空的，請先回到第一分頁選購。")
     else:
         cart_summary = []
         total_sv, total_dpt = 0, 0
         
-        # 顯示購物車項目
+        # 購物車清單展示
         for item_id, qty in list(st.session_state.cart.items()):
             product = df[df['貨號'] == item_id].iloc[0]
             sub_sv = product['積分額 SV'] * qty
@@ -158,9 +164,15 @@ with tab2:
             after_copy_label="✅ 已成功複製！可直接貼到 LINE"
         )
         
-        if st.button("🧹 清空購物車", use_container_width=True):
+        if st.button("🧹 清空整個購物車", use_container_width=True):
             st.session_state.cart = {}
             st.rerun()
 
-# 樣式修飾
-st.markdown("<style>.stButton>button {border-radius: 5px;}</style>", unsafe_allow_html=True)
+# --- CSS 視覺調整 ---
+st.markdown("""
+<style>
+    .stButton>button {
+        border-radius: 5px;
+    }
+</style>
+""", unsafe_allow_html=True)
