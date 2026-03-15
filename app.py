@@ -21,13 +21,12 @@ def load_data():
 
 df = load_data()
 
-# --- 側邊欄：搜尋篩選 ---
-st.sidebar.header("🔍 快速過濾產品")
+# --- 側邊欄：搜尋與過濾 ---
+st.sidebar.header("🔍 產品篩選")
 search_term = st.sidebar.text_input("搜尋品名或貨號", "")
 all_categories = ["全部"] + sorted(df["類別"].unique().tolist())
 selected_category = st.sidebar.selectbox("篩選類別", all_categories)
 
-# 過濾邏輯
 filtered_df = df.copy()
 if search_term:
     filtered_df = filtered_df[
@@ -37,31 +36,55 @@ if search_term:
 if selected_category != "全部":
     filtered_df = filtered_df[filtered_df["類別"] == selected_category]
 
-# --- 主介面佈局 ---
-col_order, col_products = st.columns([1.2, 1.8])
+# --- 分頁設定 ---
+tab1, tab2 = st.tabs(["🛍️ 產品選購區", "🛒 我的購物車"])
 
-# --- 左側：訂購單與購物車管理 ---
-with col_order:
-    st.subheader("📋 1. 填寫訂單資訊")
+# --- Tab 1: 產品選購區 ---
+with tab1:
+    st.title("🌿 丞燕產品選購")
     
+    # 訂購人與序號基礎資訊（放在選購區上方方便填寫）
     with st.container(border=True):
-        customer_name = st.text_input("👤 訂購人姓名", placeholder="請輸入姓名...")
-        tw_time = datetime.now() + timedelta(hours=8)
-        today_str = tw_time.strftime("%Y%m%d")
-        order_id = f"{today_str}-{st.session_state.order_count:03d}"
-        
-        st.write(f"🆔 當前訂單序號: `{order_id}`")
-        if st.button("🔄 切換至下一筆訂單"):
-            st.session_state.order_count += 1
-            st.rerun()
+        c1, c2 = st.columns(2)
+        with c1:
+            customer_name = st.text_input("👤 訂購人姓名", placeholder="請輸入姓名...")
+        with c2:
+            tw_time = datetime.now() + timedelta(hours=8)
+            today_str = tw_time.strftime("%Y%m%d")
+            order_id = f"{today_str}-{st.session_state.order_count:03d}"
+            st.write(f"🆔 當前訂單序號: `{order_id}`")
+            if st.button("🔄 更換下一組序號"):
+                st.session_state.order_count += 1
+                st.rerun()
 
-    st.subheader("🛒 2. 確認訂購內容")
+    st.divider()
+    
+    # 產品展示
+    for _, row in filtered_df.iterrows():
+        with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
+            col_info, col_action = st.columns([1.5, 1])
+            with col_info:
+                st.write(f"🔢 貨號: `{row['貨號']}`")
+                st.write(f"⭐ 積分: SV {row['積分額 SV']}")
+            with col_action:
+                qty = st.number_input("購買數量", min_value=1, value=1, key=f"qty_{row['貨號']}")
+                if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", use_container_width=True):
+                    item_id = row['貨號']
+                    st.session_state.cart[item_id] = st.session_state.cart.get(item_id, 0) + qty
+                    # 加入成功提醒訊息
+                    st.success(f"✅ 【{row['品名']}】已放入購物車！ (目前共 {st.session_state.cart[item_id]} 件)")
+
+# --- Tab 2: 我的購物車 ---
+with tab2:
+    st.header("📝 訂購內容確認")
+    
     if not st.session_state.cart:
-        st.info("尚未選購任何產品。")
+        st.info("目前購物車內沒有產品，請先前往【產品選購區】挑選。")
     else:
         cart_summary = []
         total_sv, total_dpt = 0, 0
         
+        # 顯示購物車項目
         for item_id, qty in list(st.session_state.cart.items()):
             product = df[df['貨號'] == item_id].iloc[0]
             sub_sv = product['積分額 SV'] * qty
@@ -76,7 +99,7 @@ with col_order:
                     st.markdown(f"**{product['品名']}**")
                     st.caption(f"數量: {qty} | 金額: NT$ {sub_dpt:,} | 積分: SV {sub_sv:,}")
                 with cc2:
-                    if st.button("🗑️", key=f"del_{item_id}"):
+                    if st.button("🗑️ 刪除", key=f"del_{item_id}"):
                         del st.session_state.cart[item_id]
                         st.rerun()
         
@@ -84,28 +107,28 @@ with col_order:
         st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,}")
         st.metric("總計積分 (SV)", f"SV {total_sv:,}")
 
-        # --- 防呆機制：使用 Radio Button 確保只能三選一 ---
+        # --- 優惠計算 (單選防呆) ---
         st.write("🎁 **優惠計算選項**")
         promo_choice = st.radio(
-            "請選擇優惠方案：",
-            ["不使用優惠", "方案 A: (SV - 4500) x 10%", "方案 B: SV x 10%"],
+            "請選擇適用的方案：",
+            ["不使用優惠", "使用優惠方案 (SV - 4500) x 10%", "使用優惠方案 SV x 10%"],
             index=0
         )
 
         promo_info = ""
         final_price = total_dpt
 
-        if promo_choice == "方案 A: (SV - 4500) x 10%":
+        if " (SV - 4500) x 10%" in promo_choice:
             calc_sv = max(0, (total_sv - 4500) * 0.1)
             final_price = total_dpt - calc_sv
-            promo_info += f"\n💡 【優惠方案 A】\n"
+            promo_info += f"\n💡 【優惠方案】\n"
             promo_info += f"分數計算: (SV {total_sv:,} - 4500) x 10% = {calc_sv:,.0f} 分\n"
             promo_info += f"優惠價格: NT$ {total_dpt:,} - {calc_sv:,.0f} = NT$ {final_price:,.0f}\n"
 
-        elif promo_choice == "方案 B: SV x 10%":
+        elif " SV x 10%" in promo_choice:
             calc_sv_2 = total_sv * 0.1
             final_price = total_dpt - calc_sv_2
-            promo_info += f"\n💡 【優惠方案 B】\n"
+            promo_info += f"\n💡 【優惠方案】\n"
             promo_info += f"分數計算: SV {total_sv:,} x 10% = {calc_sv_2:,.0f} 分\n"
             promo_info += f"優惠價格: NT$ {total_dpt:,} - {calc_sv_2:,.0f} = NT$ {final_price:,.0f}\n"
 
@@ -139,21 +162,5 @@ with col_order:
             st.session_state.cart = {}
             st.rerun()
 
-# --- 右側：產品選購區 ---
-with col_products:
-    st.title("🌿 產品選購區")
-    for _, row in filtered_df.iterrows():
-        with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
-            c1, c2 = st.columns([1.5, 1])
-            with c1:
-                st.write(f"🔢 貨號: `{row['貨號']}`")
-                st.write(f"⭐ 積分: SV {row['積分額 SV']} ")
-            with c2:
-                qty = st.number_input("購買數量", min_value=1, value=1, key=f"qty_{row['貨號']}")
-                if st.button("➕ 加入", key=f"btn_{row['貨號']}", use_container_width=True):
-                    item_id = row['貨號']
-                    st.session_state.cart[item_id] = st.session_state.cart.get(item_id, 0) + qty
-                    st.toast(f"✅ 已加入 {qty} 件 {row['品名']}")
-                    st.rerun()
-
+# 樣式修飾
 st.markdown("<style>.stButton>button {border-radius: 5px;}</style>", unsafe_allow_html=True)
