@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import os
+import time  # 引入時間套件來處理 Google 同步延遲
 from st_copy_to_clipboard import st_copy_to_clipboard
 import gspread
 from google.oauth2.service_account import Credentials
@@ -22,22 +23,32 @@ RECORD_COLUMNS = ["訂單序號", "日期", "訂購人姓名", "訂購品項", "
 def get_gspread_client():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        # 讀取 Streamlit Secrets 中的金鑰
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
         return client.open("訂購紀錄").sheet1
     except Exception as e:
-        st.error(f"Google Sheets 連線失敗，請檢查金鑰或試算表名稱與權限。錯誤: {e}")
+        st.error(f"Google Sheets 連線失敗，請檢查金鑰或試算表名稱。錯誤: {e}")
         return None
 
-# 讀取雲端紀錄
+# --- 強化的雲端紀錄讀取功能 ---
 def load_records():
     ws = get_gspread_client()
     if ws:
-        records = ws.get_all_records()
-        if records:
-            return pd.DataFrame(records)
-        else:
+        try:
+            records = ws.get_all_records()
+            if not records:
+                return pd.DataFrame(columns=RECORD_COLUMNS)
+            
+            df = pd.DataFrame(records)
+            
+            # 【防呆機制】：強制檢查所有必備欄位，若 Google Sheets 中遺失了某個表頭，程式會自動補上空欄位避免當機
+            for col in RECORD_COLUMNS:
+                if col not in df.columns:
+                    df[col] = ""
+                    
+            return df
+        except Exception as e:
+            # 如果讀取出現嚴重錯誤，回傳乾淨的空表以維持系統運作
             return pd.DataFrame(columns=RECORD_COLUMNS)
     return None
 
@@ -52,11 +63,14 @@ def get_next_order_id():
     
     records_df = load_records()
     if records_df is not None and not records_df.empty:
-        last_order = str(records_df.iloc[-1]["訂單序號"])
-        if "-" in last_order:
-            last_date, last_seq = last_order.split("-")
-            if last_date == today_str:
-                return f"{today_str}-{int(last_seq) + 1:03d}"
+        try:
+            last_order = str(records_df.iloc[-1]["訂單序號"])
+            if "-" in last_order:
+                last_date, last_seq = last_order.split("-")
+                if last_date == today_str:
+                    return f"{today_str}-{int(last_seq) + 1:03d}"
+        except Exception:
+            pass # 發生任何字串解析錯誤時，安全略過
             
     return f"{today_str}-001"
 
@@ -212,28 +226,34 @@ with tab2:
             if ws:
                 promo_record = promo_info.replace('\n', ' ').strip() if promo_info else "無"
                 
-                # 🛠️ 修正點：使用 int() 將 Pandas 型別強制轉為 Python 原生數字型別
                 new_row = [
                     str(order_id),
                     str(order_time_str),
                     str(customer_name) if customer_name else "未填寫",
                     ", ".join(items_str_list),
-                    int(total_dpt),        # 解決 JSON serialization 的關鍵
-                    int(total_sv),         # 解決 JSON serialization 的關鍵
+                    int(total_dpt),        
+                    int(total_sv),         
                     str(promo_record),
-                    int(final_price)       # 解決 JSON serialization 的關鍵
+                    int(final_price)       
                 ]
                 
-                # 如果是第一筆資料且沒有標題，先寫入標題
-                if len(ws.get_all_values()) == 0:
-                    ws.append_row(RECORD_COLUMNS)
-                
-                # 寫入資料
-                ws.append_row(new_row)
-                
-                st.session_state.cart = {}
-                st.session_state.saved_receipt = copy_text
-                st.rerun()
+                try:
+                    # 檢查第一列是否已經有表頭
+                    header_vals = ws.row_values(1)
+                    if not header_vals:
+                        # 如果連表頭都沒有，保證一次寫入兩列 (表頭 + 資料)
+                        ws.append_rows([RECORD_COLUMNS, new_row])
+                    else:
+                        ws.append_row(new_row)
+                    
+                    # 💡【關鍵修復】：強制系統暫停 1.5 秒，給 Google 雲端足夠時間同步
+                    time.sleep(1.5)
+                    
+                    st.session_state.cart = {}
+                    st.session_state.saved_receipt = copy_text
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"寫入過程發生錯誤: {e}")
             else:
                 st.error("無法連接至 Google 雲端硬碟，儲存失敗。")
 
@@ -275,11 +295,12 @@ with tab3:
                 if st.button("💾 同步更新至 Google 雲端", type="primary"):
                     ws = get_gspread_client()
                     if ws:
-                        # 將所有的數值轉換回一般型別（或轉為字串）以免同樣報錯
-                        # 處理寫回 Google sheet 可能發生的 nan / int 錯誤
+                        # 將所有的空值轉換為空字串，以符合 Google Sheets 的格式要求
                         edited_df = edited_df.fillna("") 
                         ws.clear()
                         ws.update(values=[edited_df.columns.values.tolist()] + edited_df.values.tolist(), range_name='A1')
+                        
+                        time.sleep(1.5) # 同步更新後也稍微等待
                         st.success("✅ 雲端紀錄已成功同步更新！")
                         st.rerun()
                     else:
