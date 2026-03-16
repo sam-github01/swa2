@@ -25,7 +25,7 @@ def get_gspread_client():
         # 讀取 Streamlit Secrets 中的金鑰
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
-        return client.open("訂購紀錄").sheet1  # 確保您的 Google 試算表名稱叫做 "訂購紀錄"
+        return client.open("訂購紀錄").sheet1
     except Exception as e:
         st.error(f"Google Sheets 連線失敗，請檢查金鑰或試算表名稱與權限。錯誤: {e}")
         return None
@@ -60,7 +60,7 @@ def get_next_order_id():
             
     return f"{today_str}-001"
 
-# 3. 讀取產品資料庫 (維持本地 CSV)
+# 3. 讀取產品資料庫
 @st.cache_data
 def load_data():
     df = pd.read_csv('丞燕產品價格.csv', dtype={'貨號': str})
@@ -212,15 +212,16 @@ with tab2:
             if ws:
                 promo_record = promo_info.replace('\n', ' ').strip() if promo_info else "無"
                 
+                # 🛠️ 修正點：使用 int() 將 Pandas 型別強制轉為 Python 原生數字型別
                 new_row = [
-                    order_id,
-                    order_time_str,
-                    customer_name if customer_name else "未填寫",
+                    str(order_id),
+                    str(order_time_str),
+                    str(customer_name) if customer_name else "未填寫",
                     ", ".join(items_str_list),
-                    total_dpt,
-                    total_sv,
-                    promo_record,
-                    final_price
+                    int(total_dpt),        # 解決 JSON serialization 的關鍵
+                    int(total_sv),         # 解決 JSON serialization 的關鍵
+                    str(promo_record),
+                    int(final_price)       # 解決 JSON serialization 的關鍵
                 ]
                 
                 # 如果是第一筆資料且沒有標題，先寫入標題
@@ -274,7 +275,9 @@ with tab3:
                 if st.button("💾 同步更新至 Google 雲端", type="primary"):
                     ws = get_gspread_client()
                     if ws:
-                        # 清空原有試算表資料並覆蓋寫入新的 DF
+                        # 將所有的數值轉換回一般型別（或轉為字串）以免同樣報錯
+                        # 處理寫回 Google sheet 可能發生的 nan / int 錯誤
+                        edited_df = edited_df.fillna("") 
                         ws.clear()
                         ws.update(values=[edited_df.columns.values.tolist()] + edited_df.values.tolist(), range_name='A1')
                         st.success("✅ 雲端紀錄已成功同步更新！")
