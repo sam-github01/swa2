@@ -1,5 +1,3 @@
 streamlit
 pandas
 st-copy-to-clipboard
-gspread
-google-auth
