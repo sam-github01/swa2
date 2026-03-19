@@ -9,14 +9,25 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # 1. 頁面與 Icon 配置
-# ⚠️ 請確保下方的 ICON_URL 是「直接圖片連結」(結尾為 .png 或 .jpg)
-ICON_URL = "https://i.ibb.co/9k0Rhkt5/IMG-3089.png"  
+ICON_URL = "https://i.ibb.co/9k0Rhkt5/IMG-3089.png"
 
 st.set_page_config(
     page_title="丞燕產品訂購系統", 
-    page_icon=ICON_URL, # 這裡加入了您的專屬 Icon
+    page_icon=ICON_URL,
     layout="wide"
 )
+
+# --- 針對 iPhone (iOS) 手機主畫面的專屬圖示設定 ---
+st.markdown(
+    f"""
+    <link rel="apple-touch-icon" href="{ICON_URL}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{ICON_URL}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{ICON_URL}">
+    <link rel="apple-touch-icon" sizes="167x167" href="{ICON_URL}">
+    """,
+    unsafe_allow_html=True
+)
+
 
 # 2. 初始化 Session State
 if 'cart' not in st.session_state:
