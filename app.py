@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版)20  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版)21  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -150,13 +150,35 @@ with tab1:
             with col_info:
                 st.write(f"🔢 貨號: `{row['貨號']}`")
                 st.write(f"⭐ 積分: SV {row['積分額 SV']}")
+            
             with col_action:
-                # 💡【修改點】：step 設定為 1.0，讓按鈕每次加減 1，但保留小數點輸入能力
-                qty = st.number_input("購買數量", min_value=0.1, value=1.0, step=1.0, format="%.1f", key=f"qty_{row['貨號']}")
+                # 💡【新增】：散購模式切換開關
+                use_loose = st.toggle("🧩 散購模式", key=f"loose_mode_{row['貨號']}")
+                
+                if use_loose:
+                    # 開啟散購：顯示包數設定
+                    lc1, lc2 = st.columns(2)
+                    with lc1:
+                        total_pkgs = st.number_input("一盒幾包?", min_value=1, value=30, step=1, key=f"tot_{row['貨號']}")
+                    with lc2:
+                        buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
+                    
+                    # 計算小數點比例 (保留到小數點後 4 位，確保計算精準)
+                    qty = round(buy_pkgs / total_pkgs, 4)
+                    st.caption(f"💡 系統換算比例：{qty:g} 份")
+                else:
+                    # 關閉散購：維持原本的整數/小數輸入
+                    qty = st.number_input("購買數量", min_value=0.1, value=1.0, step=1.0, format="%.1f", key=f"qty_{row['貨號']}")
+
                 if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", width="stretch"):
                     item_id = row['貨號']
-                    st.session_state.cart[item_id] = round(st.session_state.cart.get(item_id, 0.0) + qty, 1)
-                    st.success(f"✅ 已放入：{row['品名']} x {qty}")
+                    # 將計算後的數量加入購物車
+                    st.session_state.cart[item_id] = round(st.session_state.cart.get(item_id, 0.0) + qty, 4)
+                    
+                    if use_loose:
+                        st.success(f"✅ 已放入散購：{row['品名']} x {buy_pkgs} 包 ({qty:g} 份)")
+                    else:
+                        st.success(f"✅ 已放入：{row['品名']} x {qty:g}")
 
 # ==========================================
 # Tab 2: 單獨放置購物車內容
@@ -195,7 +217,8 @@ with tab2:
                 cc1, cc2 = st.columns([5, 1])
                 with cc1:
                     st.markdown(f"**{product['品名']}**")
-                    st.caption(f"數量: {qty} | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
+                    # 使用 :g 去除不必要的尾數 0，讓畫面更清爽
+                    st.caption(f"數量: {qty:g} | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
                 with cc2:
                     if st.button("🗑️ 刪除", key=f"del_{item_id}"):
                         del st.session_state.cart[item_id]
@@ -238,8 +261,8 @@ with tab2:
         copy_text += "="*22 + "\n"
         items_str_list = []
         for item in cart_summary:
-            copy_text += f"• {item['品名']} x {item['數量']}  (NT$ {item['DPT']:,.1f} / SV {item['SV']:,.1f})\n"
-            items_str_list.append(f"{item['品名']}x{item['數量']}")
+            copy_text += f"• {item['品名']} x {item['數量']:g}  (NT$ {item['DPT']:,.1f} / SV {item['SV']:,.1f})\n"
+            items_str_list.append(f"{item['品名']}x{item['數量']:g}")
         copy_text += "="*22 + "\n"
         copy_text += f"💰 總計金額：NT$ {total_dpt:,.1f}\n⭐ 總計積分：SV {total_sv:,.1f}\n"
         if promo_info:
