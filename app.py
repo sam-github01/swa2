@@ -1,15 +1,22 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版)17  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版)18  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import os
-import time  # 引入時間套件來處理 Google 同步延遲
+import time
 from st_copy_to_clipboard import st_copy_to_clipboard
 import gspread
 from google.oauth2.service_account import Credentials
 
-# 1. 頁面配置
-st.set_page_config(page_title="丞燕產品訂購系統", layout="wide")
+# 1. 頁面與 Icon 配置
+# ⚠️ 請確保下方的 ICON_URL 是「直接圖片連結」(結尾為 .png 或 .jpg)
+ICON_URL = "https://i.ibb.co/9k0Rhkt5/IMG-3089.png"  
+
+st.set_page_config(
+    page_title="丞燕產品訂購系統", 
+    page_icon=ICON_URL, # 這裡加入了您的專屬 Icon
+    layout="wide"
+)
 
 # 2. 初始化 Session State
 if 'cart' not in st.session_state:
@@ -41,14 +48,12 @@ def load_records():
             
             df = pd.DataFrame(records)
             
-            # 【防呆機制】：強制檢查所有必備欄位，若 Google Sheets 中遺失了某個表頭，程式會自動補上空欄位避免當機
             for col in RECORD_COLUMNS:
                 if col not in df.columns:
                     df[col] = ""
                     
             return df
         except Exception as e:
-            # 如果讀取出現嚴重錯誤，回傳乾淨的空表以維持系統運作
             return pd.DataFrame(columns=RECORD_COLUMNS)
     return None
 
@@ -70,7 +75,7 @@ def get_next_order_id():
                 if last_date == today_str:
                     return f"{today_str}-{int(last_seq) + 1:03d}"
         except Exception:
-            pass # 發生任何字串解析錯誤時，安全略過
+            pass 
             
     return f"{today_str}-001"
 
@@ -238,15 +243,12 @@ with tab2:
                 ]
                 
                 try:
-                    # 檢查第一列是否已經有表頭
                     header_vals = ws.row_values(1)
                     if not header_vals:
-                        # 如果連表頭都沒有，保證一次寫入兩列 (表頭 + 資料)
                         ws.append_rows([RECORD_COLUMNS, new_row])
                     else:
                         ws.append_row(new_row)
                     
-                    # 💡【關鍵修復】：強制系統暫停 1.5 秒，給 Google 雲端足夠時間同步
                     time.sleep(1.5)
                     
                     st.session_state.cart = {}
@@ -295,12 +297,11 @@ with tab3:
                 if st.button("💾 同步更新至 Google 雲端", type="primary"):
                     ws = get_gspread_client()
                     if ws:
-                        # 將所有的空值轉換為空字串，以符合 Google Sheets 的格式要求
                         edited_df = edited_df.fillna("") 
                         ws.clear()
                         ws.update(values=[edited_df.columns.values.tolist()] + edited_df.values.tolist(), range_name='A1')
                         
-                        time.sleep(1.5) # 同步更新後也稍微等待
+                        time.sleep(1.5) 
                         st.success("✅ 雲端紀錄已成功同步更新！")
                         st.rerun()
                     else:
