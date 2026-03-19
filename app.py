@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版)19  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版)20  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -7,7 +7,7 @@ import time
 from st_copy_to_clipboard import st_copy_to_clipboard
 import gspread
 from google.oauth2.service_account import Credentials
-import streamlit.components.v1 as components  # 新增這個用來執行 Javascript
+import streamlit.components.v1 as components
 
 # 1. 頁面與 Icon 配置
 ICON_URL = "https://i.ibb.co/9k0Rhkt5/IMG-3089.png"
@@ -19,7 +19,6 @@ st.set_page_config(
 )
 
 # --- 針對 iPhone (iOS) 手機主畫面的「強制注入」作法 ---
-# 利用 JavaScript 強行跨越框架，把 Apple 專用圖示寫入網頁最核心的 Head 區塊
 components.html(
     f"""
     <script>
@@ -36,7 +35,6 @@ components.html(
     height=0, 
     width=0
 )
-
 
 # 2. 初始化 Session State
 if 'cart' not in st.session_state:
@@ -153,10 +151,11 @@ with tab1:
                 st.write(f"🔢 貨號: `{row['貨號']}`")
                 st.write(f"⭐ 積分: SV {row['積分額 SV']}")
             with col_action:
-                qty = st.number_input("購買數量", min_value=1, value=1, key=f"qty_{row['貨號']}")
+                # 💡【修改點】：step 設定為 1.0，讓按鈕每次加減 1，但保留小數點輸入能力
+                qty = st.number_input("購買數量", min_value=0.1, value=1.0, step=1.0, format="%.1f", key=f"qty_{row['貨號']}")
                 if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", width="stretch"):
                     item_id = row['貨號']
-                    st.session_state.cart[item_id] = st.session_state.cart.get(item_id, 0) + qty
+                    st.session_state.cart[item_id] = round(st.session_state.cart.get(item_id, 0.0) + qty, 1)
                     st.success(f"✅ 已放入：{row['品名']} x {qty}")
 
 # ==========================================
@@ -182,12 +181,12 @@ with tab2:
             st.info("目前購物車是空的，請先回到第一分頁選購。")
     else:
         cart_summary = []
-        total_sv, total_dpt = 0, 0
+        total_sv, total_dpt = 0.0, 0.0
         
         for item_id, qty in list(st.session_state.cart.items()):
             product = df[df['貨號'] == item_id].iloc[0]
-            sub_sv = product['積分額 SV'] * qty
-            sub_dpt = product['含稅價 DPT'] * qty
+            sub_sv = round(product['積分額 SV'] * qty, 1)
+            sub_dpt = round(product['含稅價 DPT'] * qty, 1)
             total_sv += sub_sv
             total_dpt += sub_dpt
             cart_summary.append({"品名": product['品名'], "數量": qty, "SV": sub_sv, "DPT": sub_dpt})
@@ -196,15 +195,18 @@ with tab2:
                 cc1, cc2 = st.columns([5, 1])
                 with cc1:
                     st.markdown(f"**{product['品名']}**")
-                    st.caption(f"數量: {qty} | 金額: NT$ {sub_dpt:,} | 積分: SV {sub_sv:,}")
+                    st.caption(f"數量: {qty} | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
                 with cc2:
                     if st.button("🗑️ 刪除", key=f"del_{item_id}"):
                         del st.session_state.cart[item_id]
                         st.rerun()
         
+        total_dpt = round(total_dpt, 1)
+        total_sv = round(total_sv, 1)
+        
         st.divider()
-        st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,}")
-        st.metric("總計積分 (SV)", f"SV {total_sv:,}")
+        st.metric("總計金額 (DPT)", f"NT$ {total_dpt:,.1f}")
+        st.metric("總計積分 (SV)", f"SV {total_sv:,.1f}")
 
         st.write("🎁 **優惠計算選項**")
         promo_choice = st.radio(
@@ -217,14 +219,14 @@ with tab2:
         final_price = total_dpt
 
         if " (SV - 4500) x 10%" in promo_choice:
-            calc_sv = max(0, (total_sv - 4500) * 0.1)
-            final_price = total_dpt - calc_sv
-            promo_info += f"\n💡 【優惠方案】\n分數計算: (SV {total_sv:,} - 4500) x 10% = {calc_sv:,.0f} 分\n優惠價格: NT$ {total_dpt:,} - {calc_sv:,.0f} = NT$ {final_price:,.0f}\n"
+            calc_sv = max(0.0, round((total_sv - 4500) * 0.1, 1))
+            final_price = round(total_dpt - calc_sv, 1)
+            promo_info += f"\n💡 【優惠方案】\n分數計算: (SV {total_sv:,.1f} - 4500) x 10% = {calc_sv:,.1f} 分\n優惠價格: NT$ {total_dpt:,.1f} - {calc_sv:,.1f} = NT$ {final_price:,.1f}\n"
 
         elif " SV x 10%" in promo_choice:
-            calc_sv_2 = total_sv * 0.1
-            final_price = total_dpt - calc_sv_2
-            promo_info += f"\n💡 【優惠方案】\n分數計算: SV {total_sv:,} x 10% = {calc_sv_2:,.0f} 分\n優惠價格: NT$ {total_dpt:,} - {calc_sv_2:,.0f} = NT$ {final_price:,.0f}\n"
+            calc_sv_2 = round(total_sv * 0.1, 1)
+            final_price = round(total_dpt - calc_sv_2, 1)
+            promo_info += f"\n💡 【優惠方案】\n分數計算: SV {total_sv:,.1f} x 10% = {calc_sv_2:,.1f} 分\n優惠價格: NT$ {total_dpt:,.1f} - {calc_sv_2:,.1f} = NT$ {final_price:,.1f}\n"
 
         if promo_info:
             st.success(promo_info)
@@ -236,12 +238,12 @@ with tab2:
         copy_text += "="*22 + "\n"
         items_str_list = []
         for item in cart_summary:
-            copy_text += f"• {item['品名']} x {item['數量']}  (NT$ {item['DPT']:,} / SV {item['SV']:,})\n"
+            copy_text += f"• {item['品名']} x {item['數量']}  (NT$ {item['DPT']:,.1f} / SV {item['SV']:,.1f})\n"
             items_str_list.append(f"{item['品名']}x{item['數量']}")
         copy_text += "="*22 + "\n"
-        copy_text += f"💰 總計金額：NT$ {total_dpt:,}\n⭐ 總計積分：SV {total_sv:,}\n"
+        copy_text += f"💰 總計金額：NT$ {total_dpt:,.1f}\n⭐ 總計積分：SV {total_sv:,.1f}\n"
         if promo_info:
-            copy_text += promo_info + f"🔥 最終應付金額：NT$ {final_price:,.0f}\n"
+            copy_text += promo_info + f"🔥 最終應付金額：NT$ {final_price:,.1f}\n"
 
         st_copy_to_clipboard(copy_text, before_copy_label="📋 點擊複製訂單明細", after_copy_label="✅ 已成功複製！")
         
@@ -256,10 +258,10 @@ with tab2:
                     str(order_time_str),
                     str(customer_name) if customer_name else "未填寫",
                     ", ".join(items_str_list),
-                    int(total_dpt),        
-                    int(total_sv),         
+                    float(total_dpt),        
+                    float(total_sv),         
                     str(promo_record),
-                    int(final_price)       
+                    float(final_price)       
                 ]
                 
                 try:
