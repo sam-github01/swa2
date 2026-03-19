@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版)18  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版)19  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -7,6 +7,7 @@ import time
 from st_copy_to_clipboard import st_copy_to_clipboard
 import gspread
 from google.oauth2.service_account import Credentials
+import streamlit.components.v1 as components  # 新增這個用來執行 Javascript
 
 # 1. 頁面與 Icon 配置
 ICON_URL = "https://i.ibb.co/9k0Rhkt5/IMG-3089.png"
@@ -17,15 +18,23 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 針對 iPhone (iOS) 手機主畫面的專屬圖示設定 ---
-st.markdown(
+# --- 針對 iPhone (iOS) 手機主畫面的「強制注入」作法 ---
+# 利用 JavaScript 強行跨越框架，把 Apple 專用圖示寫入網頁最核心的 Head 區塊
+components.html(
     f"""
-    <link rel="apple-touch-icon" href="{ICON_URL}">
-    <link rel="apple-touch-icon" sizes="152x152" href="{ICON_URL}">
-    <link rel="apple-touch-icon" sizes="180x180" href="{ICON_URL}">
-    <link rel="apple-touch-icon" sizes="167x167" href="{ICON_URL}">
+    <script>
+        try {{
+            var link = window.parent.document.createElement('link');
+            link.rel = 'apple-touch-icon';
+            link.href = '{ICON_URL}';
+            window.parent.document.head.appendChild(link);
+        }} catch (e) {{
+            console.log("無法寫入 Head:", e);
+        }}
+    </script>
     """,
-    unsafe_allow_html=True
+    height=0, 
+    width=0
 )
 
 
