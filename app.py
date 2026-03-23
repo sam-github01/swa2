@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版 散購)24  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版 散購)25  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -179,13 +179,9 @@ with tab1:
                             use_loose = False
                         
                         if use_loose:
-                            lc1, lc2 = st.columns(2)
-                            with lc1:
-                                total_pkgs = st.number_input("一盒幾包?", min_value=1, value=pkg_count, step=1, key=f"tot_{row['貨號']}")
-                            with lc2:
-                                buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
-                            
-                            qty = round(buy_pkgs / total_pkgs, 4)
+                            # 💡【修改點】：移除了一盒幾包的輸入框，直接使用背景的 pkg_count 進行運算
+                            buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
+                            qty = round(buy_pkgs / pkg_count, 4)
                             st.caption(f"💡 系統換算比例：{qty:g} 份")
                         else:
                             qty = st.number_input("購買數量", min_value=0.1, value=1.0, step=1.0, format="%.1f", key=f"qty_{row['貨號']}")
@@ -193,7 +189,6 @@ with tab1:
                         if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", width="stretch"):
                             item_id = row['貨號']
                             
-                            # 💡【底層升級】：將購物車資料轉為字典，詳細記錄包數與散購狀態
                             if item_id not in st.session_state.cart or not isinstance(st.session_state.cart[item_id], dict):
                                 st.session_state.cart[item_id] = {'qty': 0.0, 'is_loose': False, 'buy_pkgs': 0}
                             
@@ -239,7 +234,6 @@ with tab2:
         total_sv, total_dpt = 0.0, 0.0
         
         for item_id, item_data in list(st.session_state.cart.items()):
-            # 防呆：避免舊版格式錯誤
             if not isinstance(item_data, dict):
                 item_data = {'qty': item_data, 'is_loose': False, 'buy_pkgs': 0}
                 st.session_state.cart[item_id] = item_data
@@ -271,7 +265,6 @@ with tab2:
                 cc1, cc2, cc3 = st.columns([3.5, 1, 1])
                 with cc1:
                     st.markdown(f"**{product['品名']}**")
-                    # 💡【顯示優化】：如果為散購且可拆分，直接在介面標示包數
                     if is_loose and pkg_count > 1:
                         st.caption(f"數量: {qty:g} (散購: {buy_pkgs} 包) | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
                     else:
@@ -288,7 +281,6 @@ with tab2:
                             del st.session_state.edit_mode[item_id]
                         st.rerun()
                 
-                # 💡【修改邏輯優化】：讓散購商品也能直接修改「包數」
                 if st.session_state.edit_mode.get(item_id, False):
                     st.divider()
                     ec1, ec2 = st.columns([3, 1])
@@ -354,7 +346,6 @@ with tab2:
         copy_text += "="*22 + "\n"
         items_str_list = []
         
-        # 💡【複製訂單明細優化】：精準印出散購包數
         for item in cart_summary:
             if item['is_loose'] and item['pkg_count'] > 1:
                 copy_text += f"• {item['品名']} x {item['數量']:g} -- 散購：{item['buy_pkgs']} 包  (NT$ {item['DPT']:,.1f} / SV {item['SV']:,.1f})\n"
@@ -380,7 +371,7 @@ with tab2:
                     str(order_id),
                     str(order_time_str),
                     str(customer_name) if customer_name else "未填寫",
-                    ", ".join(items_str_list), # 雲端紀錄也會同步寫入 (散購XX包) 的資訊
+                    ", ".join(items_str_list), 
                     float(total_dpt),        
                     float(total_sv),         
                     str(promo_record),
