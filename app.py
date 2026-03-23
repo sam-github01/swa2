@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版)21  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版)22  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -39,6 +39,9 @@ components.html(
 # 2. 初始化 Session State
 if 'cart' not in st.session_state:
     st.session_state.cart = {}
+# 💡【新增】：用來記錄哪些購物車項目正在「編輯狀態」
+if 'edit_mode' not in st.session_state:
+    st.session_state.edit_mode = {}
 
 # 預設的紀錄欄位
 RECORD_COLUMNS = ["訂單序號", "日期", "訂購人姓名", "訂購品項", "總計金額(DPT)", "總計積分(SV)", "優惠方案紀錄", "最終應付金額"]
@@ -152,27 +155,22 @@ with tab1:
                 st.write(f"⭐ 積分: SV {row['積分額 SV']}")
             
             with col_action:
-                # 💡【新增】：散購模式切換開關
                 use_loose = st.toggle("🧩 散購模式", key=f"loose_mode_{row['貨號']}")
                 
                 if use_loose:
-                    # 開啟散購：顯示包數設定
                     lc1, lc2 = st.columns(2)
                     with lc1:
                         total_pkgs = st.number_input("一盒幾包?", min_value=1, value=30, step=1, key=f"tot_{row['貨號']}")
                     with lc2:
                         buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
                     
-                    # 計算小數點比例 (保留到小數點後 4 位，確保計算精準)
                     qty = round(buy_pkgs / total_pkgs, 4)
                     st.caption(f"💡 系統換算比例：{qty:g} 份")
                 else:
-                    # 關閉散購：維持原本的整數/小數輸入
                     qty = st.number_input("購買數量", min_value=0.1, value=1.0, step=1.0, format="%.1f", key=f"qty_{row['貨號']}")
 
                 if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", width="stretch"):
                     item_id = row['貨號']
-                    # 將計算後的數量加入購物車
                     st.session_state.cart[item_id] = round(st.session_state.cart.get(item_id, 0.0) + qty, 4)
                     
                     if use_loose:
@@ -214,15 +212,42 @@ with tab2:
             cart_summary.append({"品名": product['品名'], "數量": qty, "SV": sub_sv, "DPT": sub_dpt})
             
             with st.container(border=True):
-                cc1, cc2 = st.columns([5, 1])
+                # 💡【修改點】：調整欄位比例，並加入修改按鈕
+                cc1, cc2, cc3 = st.columns([3.5, 1, 1])
                 with cc1:
                     st.markdown(f"**{product['品名']}**")
-                    # 使用 :g 去除不必要的尾數 0，讓畫面更清爽
                     st.caption(f"數量: {qty:g} | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
                 with cc2:
-                    if st.button("🗑️ 刪除", key=f"del_{item_id}"):
-                        del st.session_state.cart[item_id]
+                    if st.button("✏️ 修改", key=f"edit_{item_id}", width="stretch"):
+                        # 切換該品項的編輯模式開啟/關閉
+                        st.session_state.edit_mode[item_id] = not st.session_state.edit_mode.get(item_id, False)
                         st.rerun()
+                with cc3:
+                    if st.button("🗑️ 刪除", key=f"del_{item_id}", width="stretch"):
+                        del st.session_state.cart[item_id]
+                        if item_id in st.session_state.edit_mode:
+                            del st.session_state.edit_mode[item_id]
+                        st.rerun()
+                
+                # 💡【新增】：如果該品項處於編輯模式，向下展開設定區
+                if st.session_state.edit_mode.get(item_id, False):
+                    st.divider()
+                    ec1, ec2 = st.columns([3, 1])
+                    with ec1:
+                        new_qty = st.number_input(
+                            "重新設定數量：", 
+                            min_value=0.0001, 
+                            value=float(qty), 
+                            step=1.0, 
+                            key=f"newqty_{item_id}"
+                        )
+                    with ec2:
+                        # 使用 HTML 推移讓按鈕與輸入框對齊
+                        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                        if st.button("💾 確認", key=f"save_{item_id}", width="stretch", type="primary"):
+                            st.session_state.cart[item_id] = round(new_qty, 4)
+                            st.session_state.edit_mode[item_id] = False
+                            st.rerun()
         
         total_dpt = round(total_dpt, 1)
         total_sv = round(total_sv, 1)
@@ -297,6 +322,7 @@ with tab2:
                     time.sleep(1.5)
                     
                     st.session_state.cart = {}
+                    st.session_state.edit_mode = {}  # 存檔時一併清空修改狀態
                     st.session_state.saved_receipt = copy_text
                     st.rerun()
                 except Exception as e:
@@ -306,6 +332,7 @@ with tab2:
 
         if st.button("🧹 清空購物車", width="stretch"):
             st.session_state.cart = {}
+            st.session_state.edit_mode = {}
             st.rerun()
 
 # ==========================================
