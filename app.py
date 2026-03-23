@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版)22  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版 散購)23  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -103,6 +103,14 @@ def get_next_order_id():
 @st.cache_data
 def load_data():
     df = pd.read_csv('丞燕產品價格.csv', dtype={'貨號': str})
+    
+    # 💡【新增】：處理「包裝」欄位，如果沒有該欄位則預設為 1，並確保轉換為整數
+    if '包裝' not in df.columns:
+        df['包裝'] = 1
+    else:
+        # 將無法轉換為數字的值（如空白）變成 NaN，然後填補為 1，最後轉為整數
+        df['包裝'] = pd.to_numeric(df['包裝'], errors='coerce').fillna(1).astype(int)
+        
     return df
 
 df = load_data()
@@ -146,32 +154,37 @@ with tab1:
     st.subheader("第二步：選購產品")
     st.caption(f"目前顯示 {len(filtered_df)} 項產品")
     
-    # 💡【修改點】：按照類別分組顯示產品
     if not filtered_df.empty:
-        # 取得當前篩選結果中包含的所有類別
         current_categories = filtered_df['類別'].unique()
         
         for i, category in enumerate(current_categories):
-            # 顯示類別標題
             st.markdown(f"#### 🏷️ -- {category} --")
-            
-            # 過濾出該類別的產品
             cat_df = filtered_df[filtered_df['類別'] == category]
             
             for _, row in cat_df.iterrows():
+                # 取得該產品的包裝數量
+                pkg_count = int(row['包裝'])
+                
                 with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
                     col_info, col_action = st.columns([1.5, 1])
                     with col_info:
                         st.write(f"🔢 貨號: `{row['貨號']}`")
                         st.write(f"⭐ 積分: SV {row['積分額 SV']}")
+                        if pkg_count > 1:
+                            st.caption(f"📦 規格: 1 盒 {pkg_count} 包")
                     
                     with col_action:
-                        use_loose = st.toggle("🧩 散購模式", key=f"loose_mode_{row['貨號']}")
+                        # 💡【修改點】：只有包裝數量大於 1，才顯示散購模式開關
+                        if pkg_count > 1:
+                            use_loose = st.toggle("🧩 散購模式", key=f"loose_mode_{row['貨號']}")
+                        else:
+                            use_loose = False
                         
                         if use_loose:
                             lc1, lc2 = st.columns(2)
                             with lc1:
-                                total_pkgs = st.number_input("一盒幾包?", min_value=1, value=30, step=1, key=f"tot_{row['貨號']}")
+                                # 自動帶入資料庫的包裝數量作為預設值
+                                total_pkgs = st.number_input("一盒幾包?", min_value=1, value=pkg_count, step=1, key=f"tot_{row['貨號']}")
                             with lc2:
                                 buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
                             
@@ -189,7 +202,6 @@ with tab1:
                             else:
                                 st.success(f"✅ 已放入：{row['品名']} x {qty:g}")
             
-            # 在每個類別區塊底部加入分隔線（最後一個類別不加）
             if i < len(current_categories) - 1:
                 st.divider()
     else:
