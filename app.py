@@ -1,4 +1,4 @@
-##丞燕產品訂購系統 (雲端板 有紀錄查詢版 散購)23  app.py
+##丞燕產品訂購系統 (雲端板 有紀錄查詢版 散購)24  app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -104,12 +104,12 @@ def get_next_order_id():
 def load_data():
     df = pd.read_csv('丞燕產品價格.csv', dtype={'貨號': str})
     
-    # 💡【新增】：處理「包裝」欄位，如果沒有該欄位則預設為 1，並確保轉換為整數
+    # 處理「包裝」欄位，防呆機制
     if '包裝' not in df.columns:
         df['包裝'] = 1
     else:
-        # 將無法轉換為數字的值（如空白）變成 NaN，然後填補為 1，最後轉為整數
         df['包裝'] = pd.to_numeric(df['包裝'], errors='coerce').fillna(1).astype(int)
+        df['包裝'] = df['包裝'].clip(lower=1) # 確保最小為 1
         
     return df
 
@@ -162,7 +162,6 @@ with tab1:
             cat_df = filtered_df[filtered_df['類別'] == category]
             
             for _, row in cat_df.iterrows():
-                # 取得該產品的包裝數量
                 pkg_count = int(row['包裝'])
                 
                 with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
@@ -174,7 +173,6 @@ with tab1:
                             st.caption(f"📦 規格: 1 盒 {pkg_count} 包")
                     
                     with col_action:
-                        # 💡【修改點】：只有包裝數量大於 1，才顯示散購模式開關
                         if pkg_count > 1:
                             use_loose = st.toggle("🧩 散購模式", key=f"loose_mode_{row['貨號']}")
                         else:
@@ -183,7 +181,6 @@ with tab1:
                         if use_loose:
                             lc1, lc2 = st.columns(2)
                             with lc1:
-                                # 自動帶入資料庫的包裝數量作為預設值
                                 total_pkgs = st.number_input("一盒幾包?", min_value=1, value=pkg_count, step=1, key=f"tot_{row['貨號']}")
                             with lc2:
                                 buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
@@ -195,11 +192,20 @@ with tab1:
 
                         if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", width="stretch"):
                             item_id = row['貨號']
-                            st.session_state.cart[item_id] = round(st.session_state.cart.get(item_id, 0.0) + qty, 4)
+                            
+                            # 💡【底層升級】：將購物車資料轉為字典，詳細記錄包數與散購狀態
+                            if item_id not in st.session_state.cart or not isinstance(st.session_state.cart[item_id], dict):
+                                st.session_state.cart[item_id] = {'qty': 0.0, 'is_loose': False, 'buy_pkgs': 0}
                             
                             if use_loose:
-                                st.success(f"✅ 已放入散購：{row['品名']} x {buy_pkgs} 包 ({qty:g} 份)")
+                                st.session_state.cart[item_id]['is_loose'] = True
+                                st.session_state.cart[item_id]['buy_pkgs'] += buy_pkgs
+                                qty_added = round(buy_pkgs / pkg_count, 4)
+                                st.session_state.cart[item_id]['qty'] = round(st.session_state.cart[item_id]['qty'] + qty_added, 4)
+                                st.success(f"✅ 已放入散購：{row['品名']} x {buy_pkgs} 包 ({qty_added:g} 份)")
                             else:
+                                st.session_state.cart[item_id]['qty'] = round(st.session_state.cart[item_id]['qty'] + qty, 4)
+                                st.session_state.cart[item_id]['buy_pkgs'] += int(qty * pkg_count)
                                 st.success(f"✅ 已放入：{row['品名']} x {qty:g}")
             
             if i < len(current_categories) - 1:
@@ -232,19 +238,45 @@ with tab2:
         cart_summary = []
         total_sv, total_dpt = 0.0, 0.0
         
-        for item_id, qty in list(st.session_state.cart.items()):
+        for item_id, item_data in list(st.session_state.cart.items()):
+            # 防呆：避免舊版格式錯誤
+            if not isinstance(item_data, dict):
+                item_data = {'qty': item_data, 'is_loose': False, 'buy_pkgs': 0}
+                st.session_state.cart[item_id] = item_data
+                
+            qty = item_data['qty']
+            is_loose = item_data.get('is_loose', False)
+            buy_pkgs = item_data.get('buy_pkgs', 0)
+            
             product = df[df['貨號'] == item_id].iloc[0]
+            pkg_count = int(pd.to_numeric(product.get('包裝', 1), errors='coerce')) if not pd.isna(product.get('包裝', 1)) else 1
+            if pkg_count <= 0: pkg_count = 1
+
             sub_sv = round(product['積分額 SV'] * qty, 1)
             sub_dpt = round(product['含稅價 DPT'] * qty, 1)
             total_sv += sub_sv
             total_dpt += sub_dpt
-            cart_summary.append({"品名": product['品名'], "數量": qty, "SV": sub_sv, "DPT": sub_dpt})
+            
+            cart_summary.append({
+                "品名": product['品名'], 
+                "數量": qty, 
+                "SV": sub_sv, 
+                "DPT": sub_dpt,
+                "is_loose": is_loose,
+                "buy_pkgs": buy_pkgs,
+                "pkg_count": pkg_count
+            })
             
             with st.container(border=True):
                 cc1, cc2, cc3 = st.columns([3.5, 1, 1])
                 with cc1:
                     st.markdown(f"**{product['品名']}**")
-                    st.caption(f"數量: {qty:g} | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
+                    # 💡【顯示優化】：如果為散購且可拆分，直接在介面標示包數
+                    if is_loose and pkg_count > 1:
+                        st.caption(f"數量: {qty:g} (散購: {buy_pkgs} 包) | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
+                    else:
+                        st.caption(f"數量: {qty:g} | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
+                        
                 with cc2:
                     if st.button("✏️ 修改", key=f"edit_{item_id}", width="stretch"):
                         st.session_state.edit_mode[item_id] = not st.session_state.edit_mode.get(item_id, False)
@@ -256,21 +288,32 @@ with tab2:
                             del st.session_state.edit_mode[item_id]
                         st.rerun()
                 
+                # 💡【修改邏輯優化】：讓散購商品也能直接修改「包數」
                 if st.session_state.edit_mode.get(item_id, False):
                     st.divider()
                     ec1, ec2 = st.columns([3, 1])
                     with ec1:
-                        new_qty = st.number_input(
-                            "重新設定數量：", 
-                            min_value=0.0001, 
-                            value=float(qty), 
-                            step=1.0, 
-                            key=f"newqty_{item_id}"
-                        )
+                        if pkg_count > 1:
+                            edit_use_loose = st.toggle("🧩 使用散購模式修改", value=is_loose, key=f"edit_loose_{item_id}")
+                            if edit_use_loose:
+                                new_buy_pkgs = st.number_input("重新設定散購數量(包)：", min_value=1, value=int(buy_pkgs) if buy_pkgs > 0 else 1, step=1, key=f"newlooseqty_{item_id}")
+                            else:
+                                new_qty = st.number_input("重新設定數量：", min_value=0.0001, value=float(qty), step=1.0, key=f"newqty_{item_id}")
+                        else:
+                            edit_use_loose = False
+                            new_qty = st.number_input("重新設定數量：", min_value=0.0001, value=float(qty), step=1.0, key=f"newqty_{item_id}")
                     with ec2:
                         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
                         if st.button("💾 確認", key=f"save_{item_id}", width="stretch", type="primary"):
-                            st.session_state.cart[item_id] = round(new_qty, 4)
+                            if edit_use_loose:
+                                st.session_state.cart[item_id]['is_loose'] = True
+                                st.session_state.cart[item_id]['buy_pkgs'] = new_buy_pkgs
+                                st.session_state.cart[item_id]['qty'] = round(new_buy_pkgs / pkg_count, 4)
+                            else:
+                                st.session_state.cart[item_id]['is_loose'] = False
+                                st.session_state.cart[item_id]['qty'] = round(new_qty, 4)
+                                st.session_state.cart[item_id]['buy_pkgs'] = int(new_qty * pkg_count)
+                            
                             st.session_state.edit_mode[item_id] = False
                             st.rerun()
         
@@ -310,9 +353,16 @@ with tab2:
         copy_text = f"📦 【丞燕產品訂購單】\n👤 訂購人：{customer_name if customer_name else '未填寫'}\n🆔 序號：{order_id}\n📅 日期：{order_time_str}\n"
         copy_text += "="*22 + "\n"
         items_str_list = []
+        
+        # 💡【複製訂單明細優化】：精準印出散購包數
         for item in cart_summary:
-            copy_text += f"• {item['品名']} x {item['數量']:g}  (NT$ {item['DPT']:,.1f} / SV {item['SV']:,.1f})\n"
-            items_str_list.append(f"{item['品名']}x{item['數量']:g}")
+            if item['is_loose'] and item['pkg_count'] > 1:
+                copy_text += f"• {item['品名']} x {item['數量']:g} -- 散購：{item['buy_pkgs']} 包  (NT$ {item['DPT']:,.1f} / SV {item['SV']:,.1f})\n"
+                items_str_list.append(f"{item['品名']}x{item['數量']:g}(散購{item['buy_pkgs']}包)")
+            else:
+                copy_text += f"• {item['品名']} x {item['數量']:g}  (NT$ {item['DPT']:,.1f} / SV {item['SV']:,.1f})\n"
+                items_str_list.append(f"{item['品名']}x{item['數量']:g}")
+                
         copy_text += "="*22 + "\n"
         copy_text += f"💰 總計金額：NT$ {total_dpt:,.1f}\n⭐ 總計積分：SV {total_sv:,.1f}\n"
         if promo_info:
@@ -330,7 +380,7 @@ with tab2:
                     str(order_id),
                     str(order_time_str),
                     str(customer_name) if customer_name else "未填寫",
-                    ", ".join(items_str_list),
+                    ", ".join(items_str_list), # 雲端紀錄也會同步寫入 (散購XX包) 的資訊
                     float(total_dpt),        
                     float(total_sv),         
                     str(promo_record),
