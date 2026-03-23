@@ -39,7 +39,6 @@ components.html(
 # 2. 初始化 Session State
 if 'cart' not in st.session_state:
     st.session_state.cart = {}
-# 💡【新增】：用來記錄哪些購物車項目正在「編輯狀態」
 if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = {}
 
@@ -147,36 +146,54 @@ with tab1:
     st.subheader("第二步：選購產品")
     st.caption(f"目前顯示 {len(filtered_df)} 項產品")
     
-    for _, row in filtered_df.iterrows():
-        with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
-            col_info, col_action = st.columns([1.5, 1])
-            with col_info:
-                st.write(f"🔢 貨號: `{row['貨號']}`")
-                st.write(f"⭐ 積分: SV {row['積分額 SV']}")
+    # 💡【修改點】：按照類別分組顯示產品
+    if not filtered_df.empty:
+        # 取得當前篩選結果中包含的所有類別
+        current_categories = filtered_df['類別'].unique()
+        
+        for i, category in enumerate(current_categories):
+            # 顯示類別標題
+            st.markdown(f"#### 🏷️ -- {category} --")
             
-            with col_action:
-                use_loose = st.toggle("🧩 散購模式", key=f"loose_mode_{row['貨號']}")
-                
-                if use_loose:
-                    lc1, lc2 = st.columns(2)
-                    with lc1:
-                        total_pkgs = st.number_input("一盒幾包?", min_value=1, value=30, step=1, key=f"tot_{row['貨號']}")
-                    with lc2:
-                        buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
+            # 過濾出該類別的產品
+            cat_df = filtered_df[filtered_df['類別'] == category]
+            
+            for _, row in cat_df.iterrows():
+                with st.expander(f"**{row['品名']}** (NT$ {row['含稅價 DPT']:,})", expanded=False):
+                    col_info, col_action = st.columns([1.5, 1])
+                    with col_info:
+                        st.write(f"🔢 貨號: `{row['貨號']}`")
+                        st.write(f"⭐ 積分: SV {row['積分額 SV']}")
                     
-                    qty = round(buy_pkgs / total_pkgs, 4)
-                    st.caption(f"💡 系統換算比例：{qty:g} 份")
-                else:
-                    qty = st.number_input("購買數量", min_value=0.1, value=1.0, step=1.0, format="%.1f", key=f"qty_{row['貨號']}")
+                    with col_action:
+                        use_loose = st.toggle("🧩 散購模式", key=f"loose_mode_{row['貨號']}")
+                        
+                        if use_loose:
+                            lc1, lc2 = st.columns(2)
+                            with lc1:
+                                total_pkgs = st.number_input("一盒幾包?", min_value=1, value=30, step=1, key=f"tot_{row['貨號']}")
+                            with lc2:
+                                buy_pkgs = st.number_input("買幾包?", min_value=1, value=1, step=1, key=f"buy_{row['貨號']}")
+                            
+                            qty = round(buy_pkgs / total_pkgs, 4)
+                            st.caption(f"💡 系統換算比例：{qty:g} 份")
+                        else:
+                            qty = st.number_input("購買數量", min_value=0.1, value=1.0, step=1.0, format="%.1f", key=f"qty_{row['貨號']}")
 
-                if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", width="stretch"):
-                    item_id = row['貨號']
-                    st.session_state.cart[item_id] = round(st.session_state.cart.get(item_id, 0.0) + qty, 4)
-                    
-                    if use_loose:
-                        st.success(f"✅ 已放入散購：{row['品名']} x {buy_pkgs} 包 ({qty:g} 份)")
-                    else:
-                        st.success(f"✅ 已放入：{row['品名']} x {qty:g}")
+                        if st.button("➕ 加入購物車", key=f"btn_{row['貨號']}", width="stretch"):
+                            item_id = row['貨號']
+                            st.session_state.cart[item_id] = round(st.session_state.cart.get(item_id, 0.0) + qty, 4)
+                            
+                            if use_loose:
+                                st.success(f"✅ 已放入散購：{row['品名']} x {buy_pkgs} 包 ({qty:g} 份)")
+                            else:
+                                st.success(f"✅ 已放入：{row['品名']} x {qty:g}")
+            
+            # 在每個類別區塊底部加入分隔線（最後一個類別不加）
+            if i < len(current_categories) - 1:
+                st.divider()
+    else:
+        st.info("沒有找到符合條件的產品。")
 
 # ==========================================
 # Tab 2: 單獨放置購物車內容
@@ -212,14 +229,12 @@ with tab2:
             cart_summary.append({"品名": product['品名'], "數量": qty, "SV": sub_sv, "DPT": sub_dpt})
             
             with st.container(border=True):
-                # 💡【修改點】：調整欄位比例，並加入修改按鈕
                 cc1, cc2, cc3 = st.columns([3.5, 1, 1])
                 with cc1:
                     st.markdown(f"**{product['品名']}**")
                     st.caption(f"數量: {qty:g} | 金額: NT$ {sub_dpt:,.1f} | 積分: SV {sub_sv:,.1f}")
                 with cc2:
                     if st.button("✏️ 修改", key=f"edit_{item_id}", width="stretch"):
-                        # 切換該品項的編輯模式開啟/關閉
                         st.session_state.edit_mode[item_id] = not st.session_state.edit_mode.get(item_id, False)
                         st.rerun()
                 with cc3:
@@ -229,7 +244,6 @@ with tab2:
                             del st.session_state.edit_mode[item_id]
                         st.rerun()
                 
-                # 💡【新增】：如果該品項處於編輯模式，向下展開設定區
                 if st.session_state.edit_mode.get(item_id, False):
                     st.divider()
                     ec1, ec2 = st.columns([3, 1])
@@ -242,7 +256,6 @@ with tab2:
                             key=f"newqty_{item_id}"
                         )
                     with ec2:
-                        # 使用 HTML 推移讓按鈕與輸入框對齊
                         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
                         if st.button("💾 確認", key=f"save_{item_id}", width="stretch", type="primary"):
                             st.session_state.cart[item_id] = round(new_qty, 4)
@@ -322,7 +335,7 @@ with tab2:
                     time.sleep(1.5)
                     
                     st.session_state.cart = {}
-                    st.session_state.edit_mode = {}  # 存檔時一併清空修改狀態
+                    st.session_state.edit_mode = {}
                     st.session_state.saved_receipt = copy_text
                     st.rerun()
                 except Exception as e:
